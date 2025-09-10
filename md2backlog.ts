@@ -116,6 +116,16 @@ function applyTextDecorations(text: string): string {
   return result;
 }
 
+// 引用内容を処理するヘルパー関数
+function processQuoteContent(content: string, indentSize: number): string {
+  let result = content;
+  // 引用内でネストリスト変換を適用
+  result = convertNestedList(result, indentSize);
+  // 引用内でもテキスト装飾を適用
+  result = applyTextDecorations(result);
+  return result;
+}
+
 // ネストリストの変換: インデント指定スペース → -, 指定スペース×2 → --, タブ1つ → -, タブ2つ → --など
 function convertNestedList(line: string, indentSize: number = DEFAULT_VALUES.INDENT_SIZE): string {
   // タブによるインデント
@@ -216,21 +226,13 @@ function convertQuotes(text: string, indentSize: number = DEFAULT_VALUES.INDENT_
     if (REGEX_PATTERNS.QUOTE_START.test(line) && !isInQuote) {
       isInQuote = true;
       processedLines.push(BACKLOG_SYNTAX.QUOTE.START);
-      let quotedContent = line.replace(REGEX_PATTERNS.QUOTE_START, "");
-      // 引用内でネストリスト変換を適用
-      quotedContent = convertNestedList(quotedContent, indentSize);
-      // 引用内でもテキスト装飾を適用
-      quotedContent = applyTextDecorations(quotedContent);
-      processedLines.push(quotedContent);
+      const quotedContent = line.replace(REGEX_PATTERNS.QUOTE_START, "");
+      processedLines.push(processQuoteContent(quotedContent, indentSize));
     }
     // 引用行の継続
     else if (REGEX_PATTERNS.QUOTE_START.test(line) && isInQuote) {
-      let quotedContent = line.replace(REGEX_PATTERNS.QUOTE_START, "");
-      // 引用内でネストリスト変換を適用
-      quotedContent = convertNestedList(quotedContent, indentSize);
-      // 引用内でもテキスト装飾を適用
-      quotedContent = applyTextDecorations(quotedContent);
-      processedLines.push(quotedContent);
+      const quotedContent = line.replace(REGEX_PATTERNS.QUOTE_START, "");
+      processedLines.push(processQuoteContent(quotedContent, indentSize));
     }
     // 引用の終了
     else if (isInQuote) {
