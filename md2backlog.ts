@@ -177,6 +177,57 @@ function convertHtmlTags(text: string): string {
   return text.replace(REGEX_PATTERNS.BR_TAG, BACKLOG_SYNTAX.HTML.BR);
 }
 
+// ブロックレベル変換処理（行をまたぐ変換）
+function processBlockLevelConversions(text: string, indentSize: number): string {
+  let result = text;
+  
+  // コードブロックの変換を最初に実行（コードブロック内の変換を防ぐため）
+  result = convertCodeBlocks(result);
+  
+  // 引用の変換（行をまたぐため全体で処理）
+  result = convertQuotes(result, indentSize);
+  
+  // テーブルの変換（行をまたぐため全体で処理）
+  result = convertTables(result);
+  
+  return result;
+}
+
+// 行ごとの変換処理（見出し、リストなど）
+function processLineByLineConversions(text: string, indentSize: number): string {
+  const lines = text.split('\n');
+  let isInCodeBlock = false;
+  
+  const processedLines = lines.map(line => {
+    // CRを除去してLFに統一
+    const cleanLine = line.replace(REGEX_PATTERNS.CR, '');
+    
+    // コードブロック状態の追跡
+    if (cleanLine === BACKLOG_SYNTAX.CODE_BLOCK.START) {
+      isInCodeBlock = true;
+      return cleanLine;
+    } else if (cleanLine === BACKLOG_SYNTAX.CODE_BLOCK.END) {
+      isInCodeBlock = false;
+      return cleanLine;
+    }
+    
+    // コードブロック内では変換しない
+    if (isInCodeBlock) {
+      return cleanLine;
+    }
+    
+    // 各変換ルールを順次適用
+    let processedLine = cleanLine;
+    processedLine = convertHeading(processedLine);
+    processedLine = convertNestedList(processedLine, indentSize);
+    processedLine = convertNumberedList(processedLine);
+    
+    return processedLine;
+  });
+  
+  return processedLines.join('\n');
+}
+
 // コードブロックの変換を行うためのヘルパー関数
 function convertCodeBlocks(text: string): string {
   let result = text;
@@ -325,57 +376,25 @@ function convertTextDecorations(text: string): string {
 export function md2backlog(markdown: string, indentSize: number = DEFAULT_VALUES.INDENT_SIZE): string {
   let result = markdown;
   
-  // 1. コードブロックの変換を最初に実行（コードブロック内の変換を防ぐため）
-  result = convertCodeBlocks(result);
+  // ブロックレベルの変換処理
+  result = processBlockLevelConversions(result, indentSize);
   
-  // 2. 引用の変換（行をまたぐため全体で処理）
-  result = convertQuotes(result, indentSize);
+  // 行ごとの変換処理
+  result = processLineByLineConversions(result, indentSize);
   
-  // 3. テーブルの変換（行をまたぐため全体で処理）
-  result = convertTables(result);
-  
-  // 4. 行ごとの処理（見出し、リストなど、ただしコードブロック内は除外）
-  const lines = result.split('\n');
-  let isInCodeBlock = false;
-  const processedLines = lines.map(line => {
-    // CRを除去してLFに統一
-    const cleanLine = line.replace(REGEX_PATTERNS.CR, '');
-    
-    // コードブロック状態の追跡
-    if (cleanLine === BACKLOG_SYNTAX.CODE_BLOCK.START) {
-      isInCodeBlock = true;
-      return cleanLine;
-    } else if (cleanLine === BACKLOG_SYNTAX.CODE_BLOCK.END) {
-      isInCodeBlock = false;
-      return cleanLine;
-    }
-    
-    // コードブロック内では変換しない
-    if (isInCodeBlock) {
-      return cleanLine;
-    }
-    
-    // 各変換ルールを順次適用
-    let processedLine = cleanLine;
-    processedLine = convertHeading(processedLine);
-    processedLine = convertNestedList(processedLine, indentSize);
-    processedLine = convertNumberedList(processedLine);
-    
-    return processedLine;
-  });
-  
-  result = processedLines.join('\n');
-  
-  // 5. テキスト装飾の変換（コードブロック内は除外）
+  // テキスト装飾の変換（コードブロック内は除外）
   result = convertTextDecorations(result);
   
-  // 6. リンクの変換（URL変換も含む）
+  // インラインコードの変換（現在は何もしないが、ルール明示のため）
+  result = convertInlineCode(result);
+  
+  // リンクの変換（URL変換も含む）
   result = convertLink(result);
   
-  // 7. HTMLタグの変換
+  // HTMLタグの変換
   result = convertHtmlTags(result);
   
-  // 8. 見出し前後の空行を削除
+  // 見出し前後の空行を削除
   result = removeEmptyLinesAroundHeadings(result);
   
   return result;
