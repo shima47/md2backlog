@@ -107,6 +107,15 @@ function convertStrikethrough(text: string): string {
   return text.replace(REGEX_PATTERNS.STRIKETHROUGH, `${BACKLOG_SYNTAX.FORMATTING.STRIKETHROUGH}$1${BACKLOG_SYNTAX.FORMATTING.STRIKETHROUGH}`);
 }
 
+// テキスト装飾をまとめて適用するヘルパー関数
+function applyTextDecorations(text: string): string {
+  let result = text;
+  result = convertBold(result);
+  result = convertItalic(result);
+  result = convertStrikethrough(result);
+  return result;
+}
+
 // ネストリストの変換: インデント指定スペース → -, 指定スペース×2 → --, タブ1つ → -, タブ2つ → --など
 function convertNestedList(line: string, indentSize: number = DEFAULT_VALUES.INDENT_SIZE): string {
   // タブによるインデント
@@ -151,6 +160,11 @@ function convertLink(text: string): string {
 function convertInlineCode(text: string): string {
   // インラインコードはそのまま残す（変換しない）
   return text;
+}
+
+// HTMLタグの変換: <br> → &br;
+function convertHtmlTags(text: string): string {
+  return text.replace(REGEX_PATTERNS.BR_TAG, BACKLOG_SYNTAX.HTML.BR);
 }
 
 // コードブロックの変換を行うためのヘルパー関数
@@ -206,9 +220,7 @@ function convertQuotes(text: string, indentSize: number = DEFAULT_VALUES.INDENT_
       // 引用内でネストリスト変換を適用
       quotedContent = convertNestedList(quotedContent, indentSize);
       // 引用内でもテキスト装飾を適用
-      quotedContent = convertBold(quotedContent);
-      quotedContent = convertItalic(quotedContent);
-      quotedContent = convertStrikethrough(quotedContent);
+      quotedContent = applyTextDecorations(quotedContent);
       processedLines.push(quotedContent);
     }
     // 引用行の継続
@@ -217,9 +229,7 @@ function convertQuotes(text: string, indentSize: number = DEFAULT_VALUES.INDENT_
       // 引用内でネストリスト変換を適用
       quotedContent = convertNestedList(quotedContent, indentSize);
       // 引用内でもテキスト装飾を適用
-      quotedContent = convertBold(quotedContent);
-      quotedContent = convertItalic(quotedContent);
-      quotedContent = convertStrikethrough(quotedContent);
+      quotedContent = applyTextDecorations(quotedContent);
       processedLines.push(quotedContent);
     }
     // 引用の終了
@@ -301,9 +311,7 @@ function convertTextDecorations(text: string): string {
         processedLines.push(line);
       } else {
         // テキスト装飾の変換を適用
-        line = convertBold(line);
-        line = convertItalic(line);
-        line = convertStrikethrough(line);
+        line = applyTextDecorations(line);
         processedLines.push(line);
       }
     }
@@ -363,7 +371,7 @@ export function md2backlog(markdown: string, indentSize: number = DEFAULT_VALUES
   result = convertLink(result);
   
   // 7. HTMLタグの変換
-  result = result.replace(REGEX_PATTERNS.BR_TAG, BACKLOG_SYNTAX.HTML.BR);
+  result = convertHtmlTags(result);
   
   // 8. 見出し前後の空行を削除
   result = removeEmptyLinesAroundHeadings(result);
