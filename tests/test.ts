@@ -1,4 +1,4 @@
-import { md2backlog } from './md2backlog';
+import { md2backlog } from '../md2backlog';
 import { readFileSync } from 'fs';
 import * as diff from 'diff';
 
