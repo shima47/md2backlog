@@ -126,6 +126,34 @@ function processQuoteContent(content: string, indentSize: number): string {
   return result;
 }
 
+// コードブロック状態管理ユーティリティ
+function processLinesWithCodeBlockTracking(
+  text: string, 
+  lineProcessor: (line: string, isInCodeBlock: boolean) => string
+): string {
+  const lines = text.split('\n');
+  let isInCodeBlock = false;
+  
+  const processedLines = lines.map(line => {
+    // CRを除去してLFに統一
+    const cleanLine = line.replace(REGEX_PATTERNS.CR, '');
+    
+    // コードブロック状態の追跡
+    if (cleanLine === BACKLOG_SYNTAX.CODE_BLOCK.START) {
+      isInCodeBlock = true;
+      return cleanLine;
+    } else if (cleanLine === BACKLOG_SYNTAX.CODE_BLOCK.END) {
+      isInCodeBlock = false;
+      return cleanLine;
+    }
+    
+    // 各行をプロセッサで処理
+    return lineProcessor(cleanLine, isInCodeBlock);
+  });
+  
+  return processedLines.join('\n');
+}
+
 // ネストリストの変換: インデント指定スペース → -, 指定スペース×2 → --, タブ1つ → -, タブ2つ → --など
 function convertNestedList(line: string, indentSize: number = DEFAULT_VALUES.INDENT_SIZE): string {
   // タブによるインデント
@@ -178,14 +206,11 @@ function convertHtmlTags(text: string): string {
 }
 
 // ブロックレベル変換処理（行をまたぐ変換）
-function processBlockLevelConversions(text: string, indentSize: number): string {
+function processBlockLevelConversions(text: string): string {
   let result = text;
   
   // コードブロックの変換を最初に実行（コードブロック内の変換を防ぐため）
   result = convertCodeBlocks(result);
-  
-  // 引用の変換（行をまたぐため全体で処理）
-  result = convertQuotes(result, indentSize);
   
   // テーブルの変換（行をまたぐため全体で処理）
   result = convertTables(result);
@@ -193,39 +218,23 @@ function processBlockLevelConversions(text: string, indentSize: number): string 
   return result;
 }
 
+
 // 行ごとの変換処理（見出し、リストなど）
 function processLineByLineConversions(text: string, indentSize: number): string {
-  const lines = text.split('\n');
-  let isInCodeBlock = false;
-  
-  const processedLines = lines.map(line => {
-    // CRを除去してLFに統一
-    const cleanLine = line.replace(REGEX_PATTERNS.CR, '');
-    
-    // コードブロック状態の追跡
-    if (cleanLine === BACKLOG_SYNTAX.CODE_BLOCK.START) {
-      isInCodeBlock = true;
-      return cleanLine;
-    } else if (cleanLine === BACKLOG_SYNTAX.CODE_BLOCK.END) {
-      isInCodeBlock = false;
-      return cleanLine;
-    }
-    
+  return processLinesWithCodeBlockTracking(text, (line, isInCodeBlock) => {
     // コードブロック内では変換しない
     if (isInCodeBlock) {
-      return cleanLine;
+      return line;
     }
     
     // 各変換ルールを順次適用
-    let processedLine = cleanLine;
+    let processedLine = line;
     processedLine = convertHeading(processedLine);
     processedLine = convertNestedList(processedLine, indentSize);
     processedLine = convertNumberedList(processedLine);
     
     return processedLine;
   });
-  
-  return processedLines.join('\n');
 }
 
 // コードブロックの変換を行うためのヘルパー関数
@@ -337,50 +346,33 @@ function convertTables(text: string): string {
 
 // テキスト装飾の変換（コードブロック内は除外）
 function convertTextDecorations(text: string): string {
-  const lines = text.split('\n');
-  const processedLines: string[] = [];
-  let isInCodeBlock = false;
-  
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
-    
-    // コードブロック状態の追跡
-    if (line === BACKLOG_SYNTAX.CODE_BLOCK.START) {
-      isInCodeBlock = true;
-      processedLines.push(line);
-      continue;
-    } else if (line === BACKLOG_SYNTAX.CODE_BLOCK.END) {
-      isInCodeBlock = false;
-      processedLines.push(line);
-      continue;
-    }
-    
+  return processLinesWithCodeBlockTracking(text, (line, isInCodeBlock) => {
     // コードブロック内では変換しない
     if (isInCodeBlock) {
-      processedLines.push(line);
-    } else {
-      // 見出し行（*から始まる行）では変換しない
-      if (REGEX_PATTERNS.HEADING_CHECK.test(line)) {
-        processedLines.push(line);
-      } else {
-        // テキスト装飾の変換を適用
-        line = applyTextDecorations(line);
-        processedLines.push(line);
-      }
+      return line;
     }
-  }
-  
-  return processedLines.join('\n');
+    
+    // 見出し行（*から始まる行）では変換しない
+    if (REGEX_PATTERNS.HEADING_CHECK.test(line)) {
+      return line;
+    }
+    
+    // テキスト装飾の変換を適用
+    return applyTextDecorations(line);
+  });
 }
 
 export function md2backlog(markdown: string, indentSize: number = DEFAULT_VALUES.INDENT_SIZE): string {
   let result = markdown;
   
-  // ブロックレベルの変換処理
-  result = processBlockLevelConversions(result, indentSize);
+  // ブロックレベルの変換処理（コードブロック、テーブル）
+  result = processBlockLevelConversions(result);
   
-  // 行ごとの変換処理
+  // 行ごとの変換処理（見出し、リスト）
   result = processLineByLineConversions(result, indentSize);
+  
+  // 引用の変換処理（リスト変換重複を回避するため行ごと処理後に実行）
+  result = convertQuotes(result, indentSize);
   
   // テキスト装飾の変換（コードブロック内は除外）
   result = convertTextDecorations(result);
